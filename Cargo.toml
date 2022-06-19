@@ -1,5 +1,5 @@
 [package]
-name = "uuid_generator"
+name = "sm_uuid_generator"
 version = "0.1.0"
 edition = "2021"
 authors=["Tofix.rs"]

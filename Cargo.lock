@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uuid_generator"
+name = "sm_uuid_generator"
 version = "0.1.0"
 dependencies = [
  "json_comments",
