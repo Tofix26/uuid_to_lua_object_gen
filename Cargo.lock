@@ -38,7 +38,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "uuid_to_lua_object_gen"
+name = "uuid_generator"
 version = "0.1.0"
 dependencies = [
  "json_comments",
