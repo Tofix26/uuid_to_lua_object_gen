@@ -1,4 +1,5 @@
 #![feature(path_try_exists)]
+use colored::*;
 use json_comments::StripComments;
 use serde_json::{from_reader, Value};
 use std::fs::{create_dir_all, read_dir, read_to_string, try_exists, DirEntry, File};
@@ -138,19 +139,35 @@ fn gen_set(name: &str, path: String, folder: &Folder) -> String {
         file_content += &format!("\n-- {}\n\n", entry);
         for object in file[entry].as_array().unwrap().iter() {
             if object["uuid"].is_null() {
-                println!("There is an object without uuid in file {}", name);
+                println!(
+                    "{} There is an object without uuid in file {}",
+                    "Error:".red(),
+                    name
+                );
                 continue;
             }
             if object["name"].is_null() || object["name"].as_str().unwrap().is_empty() {
                 println!(
-                    "Object {} in file {} doesn't have a name",
-                    object["uuid"], name
+                    "{} Object {} in file {} doesn't have a name",
+                    "Error:".red(),
+                    object["uuid"],
+                    name
                 );
                 continue;
             }
+            let mut file_name = object["name"].as_str().unwrap().to_string();
+            if file_name.contains(" ") {
+                file_name = file_name.replace(" ", "_");
+                println!(
+                    "{} Object {} in file {} has a space in its name replacing with '_'",
+                    "Warning:".bright_yellow(),
+                    file_name,
+                    name
+                )
+            }
             file_content += &format!(
                 "{} = sm.uuid.new(\"{}\")\n",
-                object["name"].as_str().unwrap(),
+                file_name,
                 object["uuid"].as_str().unwrap()
             );
         }
