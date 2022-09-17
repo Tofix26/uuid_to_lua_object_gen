@@ -128,6 +128,16 @@ fn main() {
                         continue;
                     }
 
+                    let name = if name.contains(" ") {
+                        eprintln!(
+                            "{} | {name} containes spaces replacing with '_'",
+                            "INFO".bright_yellow()
+                        );
+                        name.replace(" ", "_")
+                    } else {
+                        name.to_string()
+                    };
+
                     if data.uuid.is_none() {
                         eprintln!(
                             "{} | The object with name {name} doesn't have a uuid in file {path:?}",
