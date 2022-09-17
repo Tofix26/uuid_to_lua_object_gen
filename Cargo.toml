@@ -11,3 +11,9 @@ serde_json = "1.0.81"
 json_comments = "0.2.1"
 colored = "2.0.0"
 serde = { version = "1.0.14", features = ["derive"] }
+
+[profile.release]
+strip = true # Strip symbols from binary
+opt-level = "s" # Optimize for size
+lto = true # Link time optimization
+codegen-units = 1 # Maximize size reduction optimizations
