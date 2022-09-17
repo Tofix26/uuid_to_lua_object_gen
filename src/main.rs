@@ -1,176 +1,154 @@
-#![feature(path_try_exists)]
+use std::{
+    fs::{self, File},
+    path::Path,
+};
+
 use colored::*;
 use json_comments::StripComments;
-use serde_json::{from_reader, Value};
-use std::fs::{create_dir_all, read_dir, read_to_string, try_exists, DirEntry, File};
-use std::io::Write;
-use std::vec;
 
-struct Folder {
-    path: String,
-    file: String,
-    entries: Vec<String>,
-    set_list: String,
-    set_entry: Option<String>,
-}
+mod structs;
+use structs::{Databse, DbType, Entries, Folder, Set};
 
-impl Folder {
-    fn new(
-        path: &str,
-        file: &str,
-        entries: Vec<String>,
-        set_list: &str,
-        set_entry: Option<&str>,
-    ) -> Folder {
-        let set_entry = if set_entry.is_some() {
-            Some(set_entry.unwrap().to_string())
-        } else {
-            None
-        };
-        Folder {
-            path: path.to_string(),
-            file: file.to_string(),
-            entries,
-            set_list: set_list.to_string(),
-            set_entry: set_entry,
-        }
-    }
-}
+const UTIL_PATH: &str = "./Scripts/util";
+const FOLDERS: [Folder; 5] = [
+    Folder {
+        path: "./Objects/Database/",
+        file: "shapesets.shapedb",
+        entries: ["partList", "blockList"],
+        set_list: "shapeSetList",
+        set_entry: None,
+    },
+    Folder {
+        path: "./ScriptableObjects/",
+        file: "scriptableObjectSets.sobdb",
+        entries: ["scriptableObjectList", ""],
+        set_list: "scriptableObjectSetList",
+        set_entry: Some("scriptableObjectSet"),
+    },
+    Folder {
+        path: "./Harvestables/Database/",
+        file: "harvestablesets.harvestabledb",
+        entries: ["harvestableList", ""],
+        set_list: "harvestableSetList",
+        set_entry: Some("name"),
+    },
+    Folder {
+        path: "./Tools/Database/",
+        file: "toolsets.tooldb",
+        entries: ["toolList", ""],
+        set_list: "toolSetList",
+        set_entry: None,
+    },
+    Folder {
+        path: "./Characters/Database/",
+        file: "charactersets.characterdb",
+        entries: ["characters", ""],
+        set_list: "characterSetList",
+        set_entry: None,
+    },
+];
+
 fn main() {
-    create_dir_all("./Scripts/util").unwrap();
-    let mut lua_file = File::create("./Scripts/util/uuids.lua").unwrap();
+    let path = Path::new(UTIL_PATH);
+
+    if !path.exists() {
+        fs::create_dir_all(path).unwrap();
+    }
+
+    File::create("./Scripts/util/uuids.lua").unwrap();
     let mut file_content =
         String::from("---@diagnostic disable: lowercase-global\n-- this file is generated\n");
-    let folders = [
-        Folder::new(
-            "./Objects/Database",
-            "shapesets.shapedb",
-            vec!["partList".to_string(), "blockList".to_string()],
-            "shapeSetList",
-            None,
-        ),
-        Folder::new(
-            "./ScriptableObjects",
-            "scriptableObjectSets.sobdb",
-            vec!["scriptableObjectList".to_string()],
-            "scriptableObjectSetList",
-            Some("scriptableObjectSet"),
-        ),
-        Folder::new(
-            "./Harvestables/Database",
-            "harvestablesets.harvestabledb",
-            vec!["harvestableList".to_string()],
-            "harvestableSetList",
-            Some("name"),
-        ),
-        Folder::new(
-            "./Tools/Database",
-            "toolsets.tooldb",
-            vec!["toolList".to_string()],
-            "toolSetList",
-            None,
-        ),
-        Folder::new(
-            "./Characters/Database",
-            "charactersets.characterdb",
-            vec!["characters".to_string()],
-            "characterSetList",
-            None,
-        ),
-    ];
-    for folder in folders.iter() {
-        if let Err(..) = try_exists(&folder.path) {
-            println!("Folder {} not found skipping...", folder.path);
-            continue;
-        }
-        let files: Vec<DirEntry> = read_dir(&folder.path)
-            .unwrap()
-            .into_iter()
-            .filter_map(|v| {
-                let v = v.unwrap();
-                if v.path().is_file() && v.file_name().to_str().unwrap().to_string() == folder.file
-                {
-                    Some(v)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if files.len() < 1 {
-            println!("{} file not found skipping {}", folder.file, folder.path);
-            continue;
-        }
-        file_content += &format!("\n----------------------------------------\n-- {}\n----------------------------------------\n", folder.file);
-        let file = &read_to_string(files.iter().last().unwrap().path()).unwrap();
-        let stripped = StripComments::new(file.as_bytes());
-        let file: Value = from_reader(stripped).unwrap();
-        for mut entry in file[&folder.set_list].as_array().unwrap().iter() {
-            let set_entry = folder.set_entry.as_ref();
-            if set_entry.is_some() {
-                entry = &entry[set_entry.unwrap()];
-            }
-            let path = ".".to_string() + &entry.to_string().split_at(14).1.replace("\"", "");
-            let name = &entry.as_str().unwrap().split("/").last().unwrap();
-            file_content += &gen_set(name, path, folder);
-        }
-    }
-    let name = "projectiles.projectileset";
-    let path = "./Projectiles/projectiles.projectileset";
-    let folder = Folder::new(
-        "doesn't matter",
-        "doesn't matter",
-        vec!["projectiles".to_string()],
-        "doesn't matter",
-        None,
-    );
-    file_content += &gen_set(name, path.to_string(), &folder);
-    lua_file.write(file_content.as_bytes()).unwrap();
-}
 
-fn gen_set(name: &str, path: String, folder: &Folder) -> String {
-    let mut file_content = String::from(format!("\n----------------------------------------\n-- {}\n----------------------------------------\n", name));
-    let file = &read_to_string(path).unwrap();
-    let stripped = StripComments::new(file.as_bytes());
-    let file: Value = from_reader(stripped).unwrap();
-    for entry in folder.entries.iter() {
-        if file[entry].is_null() {
-            continue;
-        }
-        file_content += &format!("\n-- {}\n\n", entry);
-        for object in file[entry].as_array().unwrap().iter() {
-            if object["uuid"].is_null() {
-                println!(
-                    "{} There is an object without uuid in file {}",
-                    "Error:".red(),
-                    name
-                );
-                continue;
-            }
-            if object["name"].is_null() || object["name"].as_str().unwrap().is_empty() {
-                println!(
-                    "{} Object {} in file {} doesn't have a name",
-                    "Error:".red(),
-                    object["uuid"],
-                    name
-                );
-                continue;
-            }
-            let mut file_name = object["name"].as_str().unwrap().to_string();
-            if file_name.contains(" ") {
-                file_name = file_name.replace(" ", "_");
-                println!(
-                    "{} Object {} in file {} has a space in its name replacing with '_'",
-                    "Warning:".bright_yellow(),
-                    file_name,
-                    name
-                )
-            }
-            file_content += &format!(
-                "{} = sm.uuid.new(\"{}\")\n",
-                file_name,
-                object["uuid"].as_str().unwrap()
+    for folder in FOLDERS.iter() {
+        let path = folder.path.to_string() + folder.file;
+        let path = Path::new(&path);
+
+        if !path.exists() {
+            eprintln!(
+                "{} | File {} not found skipping...",
+                "INFO".yellow(),
+                path.to_str().unwrap()
             );
+            continue;
+        };
+
+        let db = fs::read_to_string(path).unwrap();
+        let db = StripComments::new(db.as_bytes());
+        let db: Databse = serde_json::from_reader(db).unwrap();
+
+        let paths = db.index(&folder.set_list).as_ref().unwrap();
+        let paths = match paths {
+            DbType::Entry(entries) => Entries::parse_entries(entries, folder.set_entry.unwrap()),
+            DbType::Data(data) => data.clone(),
+        };
+
+        for path in paths.iter() {
+            let (_, path) = path.split_at(13);
+            let path = ".".to_string() + path;
+            let path = Path::new(&path);
+
+            if !path.exists() {
+                eprintln!("{} | Cannot find file {:?}", "Error".bright_red(), path);
+                continue;
+            }
+
+            let json = fs::read_to_string(path).unwrap();
+            let json = StripComments::new(json.as_bytes());
+            let json: Set = serde_json::from_reader(json).unwrap();
+
+            let file_name: Vec<&str> = path.to_str().unwrap().split("/").collect();
+            let file_name = file_name[file_name.len() - 1];
+            file_content += &format!("\n-- {file_name}\n\n");
+
+            for entry in folder.entries.iter() {
+                if entry.is_empty() {
+                    continue;
+                }
+                let data = json.index(entry).as_ref();
+                if data.is_none() {
+                    continue;
+                }
+                let data = data.unwrap();
+
+                for data in data.iter() {
+                    if data.name.is_none() {
+                        eprintln!(
+                            "{} | One of the objects is missing a name property in file {path:?}",
+                            "Error".bright_red(),
+                        );
+                        continue;
+                    }
+
+                    let name = data.name.as_ref().unwrap();
+                    if name.is_empty() {
+                        eprintln!(
+                            "{} | One of the object has an empty name propery in file {path:?}",
+                            "Error".bright_red(),
+                        );
+                        continue;
+                    }
+
+                    if data.uuid.is_none() {
+                        eprintln!(
+                            "{} | The object with name {name} doesn't have a uuid in file {path:?}",
+                            "Error".bright_red()
+                        );
+                        continue;
+                    }
+                    let uuid = data.name.as_ref().unwrap();
+                    if uuid.is_empty() {
+                        eprintln!(
+                            "{} | The object with name {name} has an empty uuid in file {path:?}",
+                            "Error".bright_red()
+                        );
+                        continue;
+                    }
+
+                    file_content += &format!("{name} = sm.uuid.new(\"{uuid}\")\n")
+                }
+            }
         }
     }
-    file_content
+
+    fs::write(UTIL_PATH.to_string() + "/uuids.lua", file_content).unwrap();
 }
