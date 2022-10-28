@@ -2,8 +2,8 @@
 
 ## Usage
 
-1.Place the exe in the root of the project
-2.Run
+1.Place the exe in the root of the project  
+2.Run  
 3.Dofile it in the script you want
 
 ## Configuration
