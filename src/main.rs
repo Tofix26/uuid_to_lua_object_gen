@@ -103,8 +103,9 @@ fn main() {
                 info!("Generated {}{} succesfully", folder.path, folder.file);
                 file_content += &str
             }
-            Err(_) => {
-                error!("Failed to generate {}{}", folder.path, folder.file)
+            Err(err) => {
+                error!("Failed to generate {}{}", folder.path, folder.file);
+                println!("{err:#?}")
             }
         }
     }
@@ -123,8 +124,8 @@ fn main() {
             },
         ) {
             Ok(str) => file_content += &str,
-            Err(_) => {
-                error!("Failed to generate projectiles")
+            Err(err) => {
+                error!("{err:#?}");
             }
         };
     }
@@ -148,31 +149,24 @@ fn gen_folder(folder: &Folder) -> Result<String, FolderGenError> {
         .as_ref()
         .ok_or(FolderGenError)
         .into_report()
-        .attach_printable_lazy(|| {
-            format!(
-                "Failed to get data out of database {}{}",
-                folder.path, folder.file
-            )
-        })?;
+        .attach_printable(format!(
+            "Failed to get data out of database {}{}",
+            folder.path, folder.file
+        ))?;
 
     let data = data
         .get_vec(folder.set_entry)
         .ok_or(FolderGenError)
         .into_report()
-        .attach_printable_lazy(|| {
-            format!(
-                "Failed to get data out of database {}{}",
-                folder.path, folder.file
-            )
-        })?;
+        .attach_printable(format!(
+            "Failed to get data out of database {}{}",
+            folder.path, folder.file
+        ))?;
 
     for path in data {
-        match gen_set(path.replace("$CONTENT_DATA", "."), folder) {
-            Ok(str) => {
-                file_content += &str;
-            }
-            Err(_) => {}
-        }
+        file_content += &gen_set(path.replace("$CONTENT_DATA", "."), folder)
+            .change_context(FolderGenError)
+            .attach_printable(format!("Failed to generate the set {path}"))?;
     }
 
     Ok(file_content)
@@ -182,7 +176,7 @@ fn gen_set(path: String, folder: &Folder) -> Result<String, SetGenError> {
     let mut file_content = String::new();
     let set = Set::from_file(&path)
         .change_context(SetGenError)
-        .attach_printable_lazy(|| format!("Failed to parse set {path}"))?;
+        .attach_printable(format!("Failed to parse set {path}"))?;
 
     for entry in folder.entries {
         if entry.is_empty() {
