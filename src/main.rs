@@ -1,164 +1,187 @@
+mod errors;
+mod structs;
+mod utill;
+
 use std::{
-    fs::{self, File},
+    fs::{create_dir_all, File},
+    io::Write,
     path::Path,
+    process,
 };
 
-use colored::*;
-use json_comments::StripComments;
+use error_stack::{IntoReport, Result, ResultExt};
+use errors::{FolderGenError, SetGenError};
+use log::{error, info, warn};
+use owo_colors::OwoColorize;
+use structs::{database::Db, misc::Folder, set::Set};
 
-mod structs;
-use structs::{Databse, DbType, Entries, Folder, Set};
+use crate::utill::FromFile;
 
 const UTIL_PATH: &str = "./Scripts/util";
+const SCRIPT_NAME: &str = "uuids.lua";
 const FOLDERS: [Folder; 5] = [
     Folder {
         path: "./Objects/Database/",
         file: "shapesets.shapedb",
-        entries: ["partList", "blockList"],
-        set_list: "shapeSetList",
+        entries: ["part_list", "block_list"],
+        set_list: "shape_set_list",
         set_entry: None,
     },
     Folder {
         path: "./ScriptableObjects/",
         file: "scriptableObjectSets.sobdb",
-        entries: ["scriptableObjectList", ""],
-        set_list: "scriptableObjectSetList",
-        set_entry: Some("scriptableObjectSet"),
+        entries: ["scriptable_object_list", ""],
+        set_list: "scriptable_object_set_list",
+        set_entry: Some("scriptable_object_set"),
     },
     Folder {
         path: "./Harvestables/Database/",
         file: "harvestablesets.harvestabledb",
-        entries: ["harvestableList", ""],
-        set_list: "harvestableSetList",
-        set_entry: Some("name"),
+        entries: ["harvestable_list", ""],
+        set_list: "harvestable_set_list",
+        set_entry: Some("harvestable_object_set"),
     },
     Folder {
         path: "./Tools/Database/",
         file: "toolsets.tooldb",
-        entries: ["toolList", ""],
-        set_list: "toolSetList",
+        entries: ["tool_list", ""],
+        set_list: "tool_set_list",
         set_entry: None,
     },
     Folder {
         path: "./Characters/Database/",
         file: "charactersets.characterdb",
         entries: ["characters", ""],
-        set_list: "characterSetList",
+        set_list: "character_set_list",
         set_entry: None,
     },
 ];
 
 fn main() {
-    let path = Path::new(UTIL_PATH);
+    simple_logger::SimpleLogger::new()
+        .init()
+        .expect("Failed to init a logger");
 
-    if !path.exists() {
-        fs::create_dir_all(path).unwrap();
-    }
-
-    File::create("./Scripts/util/uuids.lua").unwrap();
     let mut file_content =
         String::from("---@diagnostic disable: lowercase-global\n-- this file is generated\n");
 
+    create_dir_all(UTIL_PATH).unwrap_or_else(|_| {
+        println!(
+            "{} | No permission to create {}",
+            "Error".bright_red(),
+            UTIL_PATH
+        );
+        process::exit(1)
+    });
+
+    let mut file = File::create(&format!("{UTIL_PATH}/{SCRIPT_NAME}")).unwrap_or_else(|_| {
+        println!(
+            "{} | No permission to create {}",
+            "Error".bright_red(),
+            SCRIPT_NAME
+        );
+        process::exit(1)
+    });
+
     for folder in FOLDERS.iter() {
-        let path = folder.path.to_string() + folder.file;
-        let path = Path::new(&path);
-
-        if !path.exists() {
-            eprintln!(
-                "{} | File {} not found skipping...",
-                "INFO".yellow(),
-                path.to_str().unwrap()
-            );
+        if !Path::new(&format!("{}{}", folder.path, folder.file)).exists() {
             continue;
-        };
+        }
 
-        let db = fs::read_to_string(path).unwrap();
-        let db = StripComments::new(db.as_bytes());
-        let db: Databse = serde_json::from_reader(db).unwrap();
-
-        let paths = db.index(&folder.set_list).as_ref().unwrap();
-        let paths = match paths {
-            DbType::Entry(entries) => Entries::parse_entries(entries, folder.set_entry.unwrap()),
-            DbType::Data(data) => data.clone(),
-        };
-
-        for path in paths.iter() {
-            let (_, path) = path.split_at(13);
-            let path = ".".to_string() + path;
-            let path = Path::new(&path);
-
-            if !path.exists() {
-                eprintln!("{} | Cannot find file {:?}", "Error".bright_red(), path);
-                continue;
+        match gen_folder(folder) {
+            Ok(str) => {
+                info!("Generated {}{} succesfully", folder.path, folder.file);
+                file_content += &str
             }
-
-            let json = fs::read_to_string(path).unwrap();
-            let json = StripComments::new(json.as_bytes());
-            let json: Set = serde_json::from_reader(json).unwrap();
-
-            let file_name: Vec<&str> = path.to_str().unwrap().split("/").collect();
-            let file_name = file_name[file_name.len() - 1];
-            file_content += &format!("\n-- {file_name}\n\n");
-
-            for entry in folder.entries.iter() {
-                if entry.is_empty() {
-                    continue;
-                }
-                let data = json.index(entry).as_ref();
-                if data.is_none() {
-                    continue;
-                }
-                let data = data.unwrap();
-
-                for data in data.iter() {
-                    if data.name.is_none() {
-                        eprintln!(
-                            "{} | One of the objects is missing a name property in file {path:?}",
-                            "Error".bright_red(),
-                        );
-                        continue;
-                    }
-
-                    let name = data.name.as_ref().unwrap();
-                    if name.is_empty() {
-                        eprintln!(
-                            "{} | One of the object has an empty name propery in file {path:?}",
-                            "Error".bright_red(),
-                        );
-                        continue;
-                    }
-
-                    let name = if name.contains(" ") {
-                        eprintln!(
-                            "{} | {name} containes spaces replacing with '_'",
-                            "INFO".bright_yellow()
-                        );
-                        name.replace(" ", "_")
-                    } else {
-                        name.to_string()
-                    };
-
-                    if data.uuid.is_none() {
-                        eprintln!(
-                            "{} | The object with name {name} doesn't have a uuid in file {path:?}",
-                            "Error".bright_red()
-                        );
-                        continue;
-                    }
-                    let uuid = data.name.as_ref().unwrap();
-                    if uuid.is_empty() {
-                        eprintln!(
-                            "{} | The object with name {name} has an empty uuid in file {path:?}",
-                            "Error".bright_red()
-                        );
-                        continue;
-                    }
-
-                    file_content += &format!("{name} = sm.uuid.new(\"{uuid}\")\n")
-                }
+            Err(_) => {
+                error!("Failed to generate {}{}", folder.path, folder.file)
             }
         }
     }
 
-    fs::write(UTIL_PATH.to_string() + "/uuids.lua", file_content).unwrap();
+    match file.write_all(file_content.as_bytes()) {
+        Ok(_) => {}
+        Err(_) => {
+            error!("Failed to write to file {UTIL_PATH}/{SCRIPT_NAME}")
+        }
+    }
+}
+
+fn gen_folder(folder: &Folder) -> Result<String, FolderGenError> {
+    let mut file_content = String::new();
+
+    let db = Db::from_file(&format!("{}{}", folder.path, folder.file))
+        .change_context(FolderGenError)
+        .attach_printable(format!("Failed to parse db {}{}", folder.path, folder.file))?;
+
+    let data = db[folder.set_list]
+        .as_ref()
+        .ok_or(FolderGenError)
+        .into_report()
+        .attach_printable_lazy(|| {
+            format!(
+                "Failed to get data out of database {}{}",
+                folder.path, folder.file
+            )
+        })?;
+
+    let data = data
+        .get_vec(folder.set_entry)
+        .ok_or(FolderGenError)
+        .into_report()
+        .attach_printable_lazy(|| {
+            format!(
+                "Failed to get data out of database {}{}",
+                folder.path, folder.file
+            )
+        })?;
+
+    for path in data {
+        match gen_set(path.replace("$CONTENT_DATA", "."), folder) {
+            Ok(str) => {
+                file_content += &str;
+            }
+            Err(_) => {}
+        }
+    }
+
+    Ok(file_content)
+}
+
+fn gen_set(path: String, folder: &Folder) -> Result<String, SetGenError> {
+    let mut file_content = String::new();
+    let set = Set::from_file(&path)
+        .change_context(SetGenError)
+        .attach_printable_lazy(|| format!("Failed to parse set {path}"))?;
+
+    for entry in folder.entries {
+        if entry.is_empty() {
+            continue;
+        }
+
+        let data = &set[entry];
+
+        if let Some(vec) = data {
+            if !vec.is_empty() {
+                file_content += &format!("\n----------------------------------------\n--{path}\n----------------------------------------\n\n");
+            }
+
+            for data in vec {
+                if data.name.contains(" ") {
+                    warn!(
+                        "{} has an space in its name replacing with \"_\"... ({path})",
+                        data.name
+                    )
+                }
+
+                file_content += &format!(
+                    "{} = sm.uuid.new(\"{}\")\n",
+                    data.name.replace(" ", "_"),
+                    data.uuid
+                );
+            }
+        }
+    }
+
+    Ok(file_content)
 }
