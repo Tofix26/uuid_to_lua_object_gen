@@ -109,6 +109,26 @@ fn main() {
         }
     }
 
+    //axolot please be consitent more so i dont forgor about stuff
+
+    if Path::new("./Projectiles/projectiles.json").exists() {
+        match gen_set(
+            "./Projectiles/projectiles.json".to_string(),
+            &Folder {
+                path: "",
+                file: "",
+                entries: ["projectiles", ""],
+                set_list: "",
+                set_entry: None,
+            },
+        ) {
+            Ok(str) => file_content += &str,
+            Err(_) => {
+                error!("Failed to generate projectiles")
+            }
+        };
+    }
+
     match file.write_all(file_content.as_bytes()) {
         Ok(_) => {}
         Err(_) => {
