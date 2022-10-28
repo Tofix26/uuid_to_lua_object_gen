@@ -21,5 +21,5 @@ Example config
 
 You can also use command arguments for config. Just use the -h flag to check how.
 
-> **Warning**
+> **Warning**  
 > DONT PUT / AT THE END OF OUTPUT DIR
