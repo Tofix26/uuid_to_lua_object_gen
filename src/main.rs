@@ -9,7 +9,7 @@ use errors::{FolderGenError, SetGenError};
 use log::{error, info, warn};
 use owo_colors::OwoColorize;
 use std::{
-    fs::{create_dir_all, File},
+    fs::{self, create_dir_all, File},
     io::Write,
     path::Path,
     process,
@@ -55,14 +55,22 @@ const FOLDERS: [Folder; 5] = [
 ];
 
 fn main() {
-    let args = Args::parse();
-
-    let script_name = args.file_name;
-    let output_dir = args.output_dir;
-
     simple_logger::SimpleLogger::new()
         .init()
         .expect("Failed to init a logger");
+
+    let config = fs::read_to_string(".sm_uid_gen");
+
+    let args = match config {
+        Ok(str) => serde_json::from_str(&str).unwrap_or_else(|err| {
+            error!("Failed to parse config file {err}");
+            Args::parse()
+        }),
+        Err(_) => Args::parse(),
+    };
+
+    let script_name = args.file_name;
+    let output_dir = args.output_dir;
 
     let mut file_content =
         String::from("---@diagnostic disable: lowercase-global\n-- this file is generated\n");
