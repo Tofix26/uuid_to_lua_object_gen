@@ -2,23 +2,20 @@ mod errors;
 mod structs;
 mod utill;
 
+use crate::utill::FromFile;
+use clap::Parser;
+use error_stack::{IntoReport, Result, ResultExt};
+use errors::{FolderGenError, SetGenError};
+use log::{error, info, warn};
+use owo_colors::OwoColorize;
 use std::{
     fs::{create_dir_all, File},
     io::Write,
     path::Path,
     process,
 };
+use structs::{arguments::Args, database::Db, misc::Folder, set::Set};
 
-use error_stack::{IntoReport, Result, ResultExt};
-use errors::{FolderGenError, SetGenError};
-use log::{error, info, warn};
-use owo_colors::OwoColorize;
-use structs::{database::Db, misc::Folder, set::Set};
-
-use crate::utill::FromFile;
-
-const UTIL_PATH: &str = "./Scripts/util";
-const SCRIPT_NAME: &str = "uuids.lua";
 const FOLDERS: [Folder; 5] = [
     Folder {
         path: "./Objects/Database/",
@@ -58,6 +55,11 @@ const FOLDERS: [Folder; 5] = [
 ];
 
 fn main() {
+    let args = Args::parse();
+
+    let script_name = args.file_name;
+    let output_dir = args.output_dir;
+
     simple_logger::SimpleLogger::new()
         .init()
         .expect("Failed to init a logger");
@@ -65,20 +67,20 @@ fn main() {
     let mut file_content =
         String::from("---@diagnostic disable: lowercase-global\n-- this file is generated\n");
 
-    create_dir_all(UTIL_PATH).unwrap_or_else(|_| {
+    create_dir_all(output_dir.clone()).unwrap_or_else(|_| {
         println!(
             "{} | No permission to create {}",
             "Error".bright_red(),
-            UTIL_PATH
+            output_dir
         );
         process::exit(1)
     });
 
-    let mut file = File::create(&format!("{UTIL_PATH}/{SCRIPT_NAME}")).unwrap_or_else(|_| {
+    let mut file = File::create(&format!("{output_dir}/{script_name}")).unwrap_or_else(|_| {
         println!(
             "{} | No permission to create {}",
             "Error".bright_red(),
-            SCRIPT_NAME
+            script_name
         );
         process::exit(1)
     });
@@ -102,7 +104,7 @@ fn main() {
     match file.write_all(file_content.as_bytes()) {
         Ok(_) => {}
         Err(_) => {
-            error!("Failed to write to file {UTIL_PATH}/{SCRIPT_NAME}")
+            error!("Failed to write to file {output_dir}/{script_name}")
         }
     }
 }
