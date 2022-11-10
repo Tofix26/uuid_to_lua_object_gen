@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "sm_uuid_generator"
-version = "1.1.0"
+version = "2.2.0"
 dependencies = [
  "clap",
  "error-stack",
